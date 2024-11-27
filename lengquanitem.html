@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物品发送后台</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        select, input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>物品发送后台</h1>
+
+        <label for="itemSearch">搜索物品：</label>
+        <select id="itemList" style="width: 100%;"></select>
+
+        <label for="itemCount">输入数量：</label>
+        <input type="number" id="itemCount" placeholder="数量" value="1" min="1">
+
+        <button onclick="sendItem()">发送物品</button>
+
+        <div class="progress-container" id="progressContainer" style="display:none;">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script>
+        const itemFile = "item.txt"; // 物品列表文件路径
+        let items = [];
+        let currentRequest = 0;
+        let totalRequests = 0;
+
+        // 读取物品列表并填充下拉框
+        async function loadItems() {
+            const response = await fetch(itemFile);
+            const data = await response.text();
+            items = data.split("\n").map(line => {
+                const [id, name] = line.split(";");
+                return { id, name };
+            });
+            updateItemList(items);
+        }
+
+        // 更新物品下拉框
+        function updateItemList(itemsToShow) {
+            const itemList = document.getElementById("itemList");
+            itemList.innerHTML = "";
+            itemsToShow.forEach(item => {
+                const option = document.createElement("option");
+                option.value = item.id;
+                option.textContent = item.name;
+                itemList.appendChild(option);
+            });
+
+            // 初始化 select2
+            $('#itemList').select2({
+                placeholder: "选择物品",
+                allowClear: true
+            });
+        }
+
+        // 发送物品
+        async function sendItem() {
+            const itemId = document.getElementById("itemList").value;
+            const itemCount = parseInt(document.getElementById("itemCount").value);
+            const itemName = items.find(item => item.id === itemId)?.name;
+
+            if (!itemId || itemCount <= 0) {
+                alert("请正确选择物品和数量！");
+                return;
+            }
+
+            // 计算需要分多少次请求
+            const maxCountPerRequest = 99;
+            totalRequests = Math.ceil(itemCount / maxCountPerRequest);
+            currentRequest = 0;
+            document.getElementById("progressContainer").style.display = "block";
+            document.getElementById("progressBar").style.width = "0%";
+
+            // 发送请求
+            await sendRequests(itemId, itemCount, itemName);
+        }
+
+        // 发送请求
+        async function sendRequests(itemId, itemCount, itemName) {
+            const maxCountPerRequest = 99;
+            let remainingCount = itemCount;
+
+            while (remainingCount > 0) {
+                const countToSend = Math.min(remainingCount, maxCountPerRequest);
+                const code = `${itemId}+${countToSend}`;
+                try {
+                    await fetch("http://124.222.239.127:81/gmht/gm/gmPay.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded"
+                        },
+                        body: `code=${code}&request_type=item&name=4357627619778041123&cde=563867095&quid=2`,
+                        mode: 'no-cors'
+                    });
+                    
+                    // 由于使用 no-cors，我们无法读取响应内容，假定请求成功
+                    currentRequest++;
+                    updateProgressBar();
+                    remainingCount -= countToSend;
+                    await new Promise(resolve => setTimeout(resolve, 100)); // 0.1秒延迟
+                } catch (error) {
+                    console.error("请求失败：", error);
+                    alert("请求失败，请重试！");
+                    break;
+                }
+            }
+
+            if (remainingCount <= 0) {
+                alert("物品发送完成！");
+            }
+        }
+
+        // 更新进度条
+        function updateProgressBar() {
+            const progressBar = document.getElementById("progressBar");
+            const progressPercentage = Math.floor((currentRequest / totalRequests) * 100);
+            progressBar.style.width = `${progressPercentage}%`;
+            progressBar.textContent = `${progressPercentage}%`;
+        }
+
+        // 页面加载完成后加载物品列表
+        loadItems();
+    </script>
+</body>
+</html>
